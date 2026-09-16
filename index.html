@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grade 8 Aerodynamics & Fluid Dynamics Simulation</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #090d16; color: #f1f5f9; margin: 0; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 24px; border-radius: 14px; box-shadow: 0 12px 30px rgba(0,0,0,0.5); border: 1px solid #334155; }
+    h1 { color: #38bdf8; margin: 0 0 16px 0; font-size: 1.6rem; display: flex; align-items: center; gap: 10px; }
+    
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .metric-card { background: #0f172a; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #38bdf8; }
+    .metric-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .metric-value { font-size: 1.3rem; font-weight: 700; color: #f8fafc; margin-top: 4px; }
+
+    .controls { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; background: #0f172a; padding: 14px; border-radius: 10px; flex-wrap: wrap; border: 1px solid #334155; }
+    .control-group { display: flex; flex-direction: column; gap: 4px; }
+    label { font-weight: 600; font-size: 0.85rem; color: #cbd5e1; }
+    select, input[type="range"] { padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-size: 0.9rem; }
+    .toggle-group { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; margin-top: auto; padding-bottom: 4px; }
+
+    canvas { background: #020617; border-radius: 10px; display: block; width: 100%; height: auto; border: 1px solid #334155; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+    
+    .legend { display: flex; justify-content: space-around; margin-top: 12px; padding: 10px; background: #0f172a; border-radius: 8px; font-size: 0.85rem; }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .color-box { width: 14px; height: 14px; border-radius: 3px; }
+
+    .physics-note { margin-top: 16px; padding: 14px; background: #020617; border-left: 4px solid #f59e0b; border-radius: 6px; font-size: 0.9rem; color: #cbd5e1; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌬️ Science 8: Aerodynamics & Drag Simulation</h1>
+    
+    <div class="dashboard">
+      <div class="metric-card" id="card-cd">
+        <div class="metric-label">Drag Coeff ($C_d$)</div>
+        <div class="metric-value" id="val-cd">0.04</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Drag Force ($F_d$)</div>
+        <div class="metric-value" id="val-force">0.12 N</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Flow Regime</div>
+        <div class="metric-value" id="val-regime" style="color: #4ade80;">Laminar</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Stagnation Press.</div>
+        <div class="metric-value" id="val-press">+125 Pa</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="shape">Test Object Geometry:</label>
+        <select id="shape">
+          <option value="streamlined">Teardrop / Airfoil (Fully Streamlined)</option>
+          <option value="wedge">Wedge / Cone (Sharp Front, Flat Back)</option>
+          <option value="sphere">Sphere / Cylinder (Curved Body)</option>
+          <option value="flat">Flat Plate (Bluff Body)</option>
+        </select>
+      </div>
+      
+      <div class="control-group">
+        <label for="speed">Freestream Velocity ($U_\infty$):</label>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="range" id="speed" min="3" max="15" value="8" step="0.5">
+          <span id="speedVal" style="font-weight:bold; min-width:45px;">8 m/s</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label for="density">Fluid Visualization:</label>
+        <select id="vizMode">
+          <option value="smoke">Smoke Streamlines</option>
+          <option value="particles">Air Molecules</option>
+        </select>
+      </div>
+
+      <label class="toggle-group">
+        <input type="checkbox" id="showPressure" checked> Show Pressure Field
+      </label>
+    </div>
+
+    <canvas id="windTunnel" width="850" height="420"></canvas>
+
+    <div class="legend">
+      <div class="legend-item"><div class="color-box" style="background: rgba(239, 68, 68, 0.6);"></div> High Pressure Zone ($v < U_\infty$)</div>
+      <div class="legend-item"><div class="color-box" style="background: rgba(14, 165, 233, 0.6);"></div> Low Pressure / Venturi ($v > U_\infty$)</div>
+      <div class="legend-item"><div class="color-box" style="background: rgba(168, 85, 247, 0.6);"></div> Turbulent Wake Zone</div>
+    </div>
+
+    <div class="physics-note" id="physicsExplanation">
+      <strong>Fluid Mechanics Insight:</strong> Loading physics model...
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('windTunnel');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const shapeSelect = document.getElementById('shape');
+    const speedInput = document.getElementById('speed');
+    const speedVal = document.getElementById('speedVal');
+    const vizModeSelect = document.getElementById('vizMode');
+    const pressureToggle = document.getElementById('showPressure');
+
+    const valCd = document.getElementById('val-cd');
+    const valForce = document.getElementById('val-force');
+    const valRegime = document.getElementById('val-regime');
+    const valPress = document.getElementById('val-press');
+    const explanation = document.getElementById('physicsExplanation');
+
+    // Simulation Constants
+    const objX = 350;
+    const objY = 210;
+    const rho = 1.225; // Air density kg/m^3
+    const numParticles = 450;
+    let particles = [];
+
+    // Aerodynamic Coefficients
+    const properties = {
+      streamlined: { cd: 0.04, area: 0.08, name: "Teardrop Airfoil", regime: "Laminar Flow", color: "#4ade80" },
+      wedge: { cd: 0.50, area: 0.12, name: "Wedge / Cone", regime: "Sharp Entry / Rear Wake", color: "#f97316" },
+      sphere: { cd: 0.47, area: 0.12, name: "Sphere", regime: "Separated / Moderate Wake", color: "#facc15" },
+      flat: { cd: 1.28, area: 0.18, name: "Flat Plate", regime: "Massive Turbulent Wake", color: "#f87171" }
+    };
+
+    class Particle {
+      constructor() {
+        this.reset(true);
+      }
+
+      reset(initial = false) {
+        this.x = initial ? Math.random() * canvas.width : -10;
+        this.y = Math.random() * canvas.height;
+        this.history = [];
+        this.maxHistory = 10;
+      }
+
+      update(U) {
+        const shape = shapeSelect.value;
+        const relX = this.x - objX;
+        const relY = this.y - objY;
+
+        let field = getVelocityField(relX, relY, shape, U);
+
+        if (field.inside) {
+          this.x += field.nx * 4;
+          this.y += field.ny * 4;
+          return;
+        }
+
+        this.x += field.vx;
+        this.y += field.vy;
+
+        this.history.push({ x: this.x, y: this.y });
+        if (this.history.length > this.maxHistory) {
+          this.history.shift();
+        }
+
+        if (this.x > canvas.width + 20 || this.y < -20 || this.y > canvas.height + 20) {
+          this.reset();
+        }
+      }
+
+      draw(mode) {
+        if (mode === 'smoke') {
+          if (this.history.length < 2) return;
+          ctx.beginPath();
+          ctx.moveTo(this.history[0].x, this.history[0].y);
+          for (let i = 1; i < this.history.length; i++) {
+            ctx.lineTo(this.history[i].x, this.history[i].y);
+          }
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // Mathematical Velocity Field Engine
+    function getVelocityField(x, y, shape, U) {
+      let vx = U;
+      let vy = 0;
+
+      if (shape === 'sphere') {
+        const R = 55;
+        const r2 = x * x + y * y;
+        const r = Math.sqrt(r2);
+
+        if (r < R) return { vx: 0, vy: 0, inside: true, nx: x / (r || 1), ny: y / (r || 1) };
+
+        const R2 = R * R;
+        vx = U * (1 - (R2 * (x * x - y * y)) / (r2 * r2));
+        vy = U * ((-2 * R2 * x * y) / (r2 * r2));
+
+        if (x > 15 && Math.abs(y) < R * 1.15) {
+          const wakeDist = x / R;
+          const turbulentFactor = Math.max(0, 1 - wakeDist / 5);
+          vx *= (0.2 + 0.8 * (1 - turbulentFactor));
+          vy += Math.sin(x * 0.08 - Date.now() * 0.008) * 3.5 * turbulentFactor;
+        }
+
+      } else if (shape === 'wedge') {
+        const xFront = -50, xBack = 25, halfH = 45;
+
+        // Inside triangular wedge body check
+        if (x >= xFront && x <= xBack) {
+          const widthAtX = ((x - xFront) / (xBack - xFront)) * halfH;
+          if (Math.abs(y) <= widthAtX) {
+            return { vx: 0, vy: 0, inside: true, nx: -0.5, ny: Math.sign(y) || 1 };
+          }
+        }
+
+        // Upstream deflections along sloped sides
+        if (x >= xFront - 35 && x <= xBack) {
+          const widthAtX = Math.max(4, ((x - xFront) / (xBack - xFront)) * halfH);
+          if (Math.abs(y) < widthAtX + 18) {
+            vy += Math.sign(y) * U * 0.45;
+            vx *= 0.82;
+          }
+        }
+
+        // Flat rear wake separation zone
+        if (x > xBack && Math.abs(y) < halfH * 1.15) {
+          const wakeLen = 220;
+          if (x < xBack + wakeLen) {
+            const wakeFactor = 1 - ((x - xBack) / wakeLen);
+            vx = U * 0.25 + U * 0.75 * (1 - wakeFactor);
+            vy += Math.sin((x - xBack) * 0.08 - Date.now() * 0.007) * 4.8 * wakeFactor;
+          }
+        }
+
+      } else if (shape === 'streamlined') {
+        const a = 35, b = 20, m = U * 2400;
+        const d1_2 = (x + a) * (x + a) + y * y;
+        const d2_2 = (x - b) * (x - b) + y * y;
+
+        vx = U + (m / (2 * Math.PI)) * ((x + a) / d1_2 - (x - b) / d2_2);
+        vy = (m / (2 * Math.PI)) * (y / d1_2 - y / d2_2);
+
+        const rHead = Math.hypot(x + 25, y);
+        if (rHead < 38 && x < -10) return { vx: 0, vy: 0, inside: true, nx: (x + 25) / rHead, ny: y / rHead };
+        if (x >= -10 && x <= 90) {
+          const bodyWidth = 38 * Math.pow(1 - (x + 10) / 105, 0.75);
+          if (Math.abs(y) < bodyWidth) return { vx: 0, vy: 0, inside: true, nx: x > 50 ? 0.8 : -0.2, ny: Math.sign(y) || 1 };
+        }
+
+      } else if (shape === 'flat') {
+        const H = 65, W = 10;
+        if (Math.abs(x) <= W && Math.abs(y) <= H) return { vx: 0, vy: 0, inside: true, nx: Math.sign(x) || 1, ny: Math.sign(y) || 1 };
+
+        if (x < 0) {
+          const dist = Math.sqrt(x * x + y * y);
+          const influence = Math.exp(-dist / 75);
+          vx = U * (1 - influence * 0.88);
+          vy = U * Math.sign(y) * (Math.abs(y) / H) * influence * 1.4;
+        } else if (Math.abs(y) < H * 1.35) {
+          const wakeLen = 280;
+          if (x < wakeLen) {
+            const wakeFactor = 1 - (x / wakeLen);
+            vx = U * 0.15 + U * 0.85 * (1 - wakeFactor);
+            vy += Math.cos(x * 0.06 - Date.now() * 0.006) * 6 * wakeFactor;
+          }
+        }
+      }
+
+      return { vx, vy, inside: false };
+    }
+
+    // Pressure Background Field
+    function drawPressureField(shape, U) {
+      if (!pressureToggle.checked) return;
+
+      const step = 16;
+      for (let x = 100; x < canvas.width; x += step) {
+        for (let y = 20; y < canvas.height; y += step) {
+          const relX = x - objX;
+          const relY = y - objY;
+          const field = getVelocityField(relX, relY, shape, U);
+
+          if (field.inside) continue;
+
+          const localV = Math.sqrt(field.vx * field.vx + field.vy * field.vy);
+          const deltaP = 0.5 * rho * (U * U - localV * localV);
+
+          if (Math.abs(deltaP) > 5) {
+            ctx.fillStyle = deltaP > 0 
+              ? `rgba(239, 68, 68, ${Math.min(0.35, deltaP / 180)})`
+              : `rgba(14, 165, 233, ${Math.min(0.35, -deltaP / 180)})`;
+            ctx.fillRect(x - step/2, y - step/2, step, step);
+          }
+        }
+      }
+    }
+
+    // Geometry Rendering
+    function drawObject(shape) {
+      ctx.fillStyle = '#e2e8f0';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+
+      if (shape === 'sphere') {
+        ctx.arc(objX, objY, 55, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === 'wedge') {
+        ctx.moveTo(objX - 50, objY);
+        ctx.lineTo(objX + 25, objY - 45);
+        ctx.lineTo(objX + 25, objY + 45);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === 'flat') {
+        ctx.fillRect(objX - 10, objY - 65, 20, 130);
+        ctx.strokeRect(objX - 10, objY - 65, 20, 130);
+      } else if (shape === 'streamlined') {
+        ctx.moveTo(objX + 95, objY);
+        ctx.quadraticCurveTo(objX - 10, objY - 38, objX - 25, objY);
+        ctx.quadraticCurveTo(objX - 10, objY + 38, objX + 95, objY);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // Drag Force Vector
+      const U = parseFloat(speedInput.value);
+      const forceMag = 0.5 * rho * U * U * properties[shape].area * properties[shape].cd;
+      const arrowLen = forceMag * 45;
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(objX, objY);
+      ctx.lineTo(objX + arrowLen, objY);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(objX + arrowLen + 8, objY);
+      ctx.lineTo(objX + arrowLen, objY - 6);
+      ctx.lineTo(objX + arrowLen, objY + 6);
+      ctx.fill();
+    }
+
+    // Particles Setup
+    for (let i = 0; i < numParticles; i++) {
+      particles.push(new Particle());
+    }
+
+    function animate() {
+      const U = parseFloat(speedInput.value);
+      const shape = shapeSelect.value;
+      const prop = properties[shape];
+
+      const Fd = 0.5 * rho * U * U * prop.area * prop.cd;
+      const stagP = 0.5 * rho * U * U;
+
+      valCd.textContent = prop.cd.toFixed(2);
+      valForce.textContent = Fd.toFixed(2) + " N";
+      valRegime.textContent = prop.regime;
+      valRegime.style.color = prop.color;
+      valPress.textContent = "+" + stagP.toFixed(0) + " Pa";
+
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawPressureField(shape, U);
+      drawObject(shape);
+
+      const mode = vizModeSelect.value;
+      particles.forEach(p => {
+        p.update(U);
+        p.draw(mode);
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    speedInput.addEventListener('input', (e) => {
+      speedVal.textContent = e.target.value + " m/s";
+    });
+
+    shapeSelect.addEventListener('change', (e) => {
+      const s = e.target.value;
+      if (s === 'streamlined') {
+        explanation.innerHTML = "<strong>Teardrop Physics:</strong> Air stays attached along the entire contour. The smooth tapered tail allows air to reconnect cleanly, eliminating almost all pressure drag.";
+      } else if (s === 'wedge') {
+        explanation.innerHTML = "<strong>Wedge / Cone Physics:</strong> The sharp nose splits air easily at the front, but the abrupt flat rear wall causes flow separation and creates a turbulent suction wake behind it.";
+      } else if (s === 'sphere') {
+        explanation.innerHTML = "<strong>Sphere Physics:</strong> Flow follows the front curve smoothly, but detaches past the crest (~80°). This boundary layer separation creates a turbulent wake zone behind the object.";
+      } else if (s === 'flat') {
+        explanation.innerHTML = "<strong>Flat Plate Physics:</strong> Extreme flow separation! Air crashes into the front surface causing a massive high-pressure stagnation zone, followed by a wide recirculating turbulent wake.";
+      }
+    });
+
+    shapeSelect.dispatchEvent(new Event('change'));
+    animate();
+  </script>
+</body>
+</html>
